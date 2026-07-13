@@ -1,8 +1,9 @@
-from tqdm import tqdm
 import numpy as np
 import torch
 import collections
 import random
+from tqdm import tqdm
+
 
 class ReplayBuffer:
     def __init__(self, capacity):
