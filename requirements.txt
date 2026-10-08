@@ -1,0 +1,13 @@
+# Python 3.11; A100 CUDA 13.0 build. Install with:
+# python -m pip install -r requirements.txt
+--extra-index-url https://download.pytorch.org/whl/cu130
+
+numpy>=1.26,<2
+matplotlib>=3.8,<4
+scipy>=1.11,<2
+torch==2.14.1+cu130
+gym==0.26.2
+gymnasium[classic-control]>=1.0,<2
+tqdm>=4.66,<5
+ipykernel>=6,<8
+ruff>=0.16,<0.17
