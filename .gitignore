@@ -1,5 +1,5 @@
 # Companion checkout
-/code/
+code/
 
 # Python bytecode and packages
 __pycache__/
@@ -33,3 +33,6 @@ ENV/
 
 # OS metadata
 .DS_Store
+
+# picture
+pic/
