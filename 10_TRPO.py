@@ -1,4 +1,5 @@
 import copy
+from pathlib import Path
 
 import gym
 import matplotlib.pyplot as plt
@@ -6,6 +7,9 @@ import torch
 import torch.nn.functional as F
 
 import rl_utils
+
+PIC_DIR = Path(__file__).resolve().parent / "pic"
+PIC_DIR.mkdir(parents=True, exist_ok=True)
 
 
 def compute_advantage(gamma, lmbda, td_delta):
@@ -240,14 +244,16 @@ plt.plot(episodes_list, return_list)
 plt.xlabel("Episodes")
 plt.ylabel("Returns")
 plt.title(f"TRPO on {env_name}")
-plt.show()
+plt.savefig(PIC_DIR / "10_01.png", dpi=300, bbox_inches="tight")
+plt.close()
 
 mv_return = rl_utils.moving_average(return_list, 9)
 plt.plot(episodes_list, mv_return)
 plt.xlabel("Episodes")
 plt.ylabel("Returns")
 plt.title(f"TRPO on {env_name}")
-plt.show()
+plt.savefig(PIC_DIR / "10_02.png", dpi=300, bbox_inches="tight")
+plt.close()
 
 # ========================================
 
@@ -468,11 +474,13 @@ plt.plot(episodes_list, return_list)
 plt.xlabel("Episodes")
 plt.ylabel("Returns")
 plt.title(f"TRPO on {env_name}")
-plt.show()
+plt.savefig(PIC_DIR / "10_03.png", dpi=300, bbox_inches="tight")
+plt.close()
 
 mv_return = rl_utils.moving_average(return_list, 9)
 plt.plot(episodes_list, mv_return)
 plt.xlabel("Episodes")
 plt.ylabel("Returns")
 plt.title(f"TRPO on {env_name}")
-plt.show()
+plt.savefig(PIC_DIR / "10_04.png", dpi=300, bbox_inches="tight")
+plt.close()
