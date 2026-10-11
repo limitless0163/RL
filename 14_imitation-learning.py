@@ -1,7 +1,7 @@
 import random
 from pathlib import Path
 
-import gym
+import gymnasium as gym
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
@@ -64,27 +64,31 @@ class PPO:
         self.device = device
 
     def take_action(self, state):
-        state = torch.tensor([state], dtype=torch.float).to(self.device)
+        state = torch.as_tensor(np.asarray([state]), dtype=torch.float).to(self.device)
         probs = self.actor(state)
         action_dist = torch.distributions.Categorical(probs)
         action = action_dist.sample()
         return action.item()
 
     def update(self, transition_dict):
-        states = torch.tensor(transition_dict["states"], dtype=torch.float).to(
-            self.device
-        )
-        actions = torch.tensor(transition_dict["actions"]).view(-1, 1).to(self.device)
-        rewards = (
-            torch.tensor(transition_dict["rewards"], dtype=torch.float)
+        states = torch.as_tensor(
+            np.asarray(transition_dict["states"]), dtype=torch.float
+        ).to(self.device)
+        actions = (
+            torch.as_tensor(np.asarray(transition_dict["actions"]))
             .view(-1, 1)
             .to(self.device)
         )
-        next_states = torch.tensor(
-            transition_dict["next_states"], dtype=torch.float
+        rewards = (
+            torch.as_tensor(np.asarray(transition_dict["rewards"]), dtype=torch.float)
+            .view(-1, 1)
+            .to(self.device)
+        )
+        next_states = torch.as_tensor(
+            np.asarray(transition_dict["next_states"]), dtype=torch.float
         ).to(self.device)
         dones = (
-            torch.tensor(transition_dict["dones"], dtype=torch.float)
+            torch.as_tensor(np.asarray(transition_dict["dones"]), dtype=torch.float)
             .view(-1, 1)
             .to(self.device)
         )
@@ -122,11 +126,13 @@ epochs = 10
 eps = 0.2
 device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
 
-env_name = "CartPole-v0"
+env_name = "CartPole-v1"
 env = gym.make(env_name)
 env.reset(seed=0)
 torch.manual_seed(0)
+assert isinstance(env.observation_space, gym.spaces.Box)
 state_dim = env.observation_space.shape[0]
+assert isinstance(env.action_space, gym.spaces.Discrete)
 action_dim = env.action_space.n
 ppo_agent = PPO(
     state_dim,
@@ -154,7 +160,7 @@ def sample_expert_data(n_episode):
             action = ppo_agent.take_action(state)
             states.append(state)
             actions.append(action)
-            next_state, reward, terminated, truncated, _ = env.step(action)
+            next_state, _reward, terminated, truncated, _ = env.step(action)
             done = terminated or truncated
             state = next_state
     return np.array(states), np.array(actions)
@@ -178,8 +184,8 @@ class BehaviorClone:
         self.optimizer = torch.optim.Adam(self.policy.parameters(), lr=lr)
 
     def learn(self, states, actions):
-        states = torch.tensor(states, dtype=torch.float).to(device)
-        actions = torch.tensor(actions).view(-1, 1).to(device)
+        states = torch.as_tensor(np.asarray(states), dtype=torch.float).to(device)
+        actions = torch.as_tensor(np.asarray(actions)).view(-1, 1).to(device)
         log_probs = torch.log(self.policy(states).gather(1, actions))
         bc_loss = torch.mean(-log_probs)  # 最大似然估计
 
@@ -188,7 +194,7 @@ class BehaviorClone:
         self.optimizer.step()
 
     def take_action(self, state):
-        state = torch.tensor([state], dtype=torch.float).to(device)
+        state = torch.as_tensor(np.asarray([state]), dtype=torch.float).to(device)
         probs = self.policy(state)
         action_dist = torch.distributions.Categorical(probs)
         action = action_dist.sample()
@@ -206,7 +212,7 @@ def test_agent(agent, env, n_episode):
             next_state, reward, terminated, truncated, _ = env.step(action)
             done = terminated or truncated
             state = next_state
-            episode_return += reward
+            episode_return += float(reward)
         return_list.append(episode_return)
     return np.mean(return_list)
 
@@ -230,7 +236,7 @@ with tqdm(total=n_iterations, desc="进度条") as pbar:
         current_return = test_agent(bc_agent, env, 5)
         test_returns.append(current_return)
         if (i + 1) % 10 == 0:
-            pbar.set_postfix({"return": "%.3f" % np.mean(test_returns[-10:])})
+            pbar.set_postfix({"return": f"{np.mean(test_returns[-10:]):.3f}"})
         pbar.update(1)
 
 iteration_list = list(range(len(test_returns)))
@@ -266,10 +272,14 @@ class GAIL:
         self.agent = agent
 
     def learn(self, expert_s, expert_a, agent_s, agent_a, next_s, dones):
-        expert_states = torch.tensor(expert_s, dtype=torch.float).to(device)
-        expert_actions = torch.tensor(expert_a).to(device)
-        agent_states = torch.tensor(agent_s, dtype=torch.float).to(device)
-        agent_actions = torch.tensor(agent_a).to(device)
+        expert_states = torch.as_tensor(np.asarray(expert_s), dtype=torch.float).to(
+            device
+        )
+        expert_actions = torch.as_tensor(np.asarray(expert_a)).to(device)
+        agent_states = torch.as_tensor(np.asarray(agent_s), dtype=torch.float).to(
+            device
+        )
+        agent_actions = torch.as_tensor(np.asarray(agent_a)).to(device)
         expert_actions = F.one_hot(expert_actions, num_classes=2).float()
         agent_actions = F.one_hot(agent_actions, num_classes=2).float()
 
@@ -330,13 +340,13 @@ with tqdm(total=n_episode, desc="进度条") as pbar:
             next_state_list.append(next_state)
             done_list.append(done)
             state = next_state
-            episode_return += reward
+            episode_return += float(reward)
         return_list.append(episode_return)
         gail.learn(
             expert_s, expert_a, state_list, action_list, next_state_list, done_list
         )
         if (i + 1) % 10 == 0:
-            pbar.set_postfix({"return": "%.3f" % np.mean(return_list[-10:])})
+            pbar.set_postfix({"return": f"{np.mean(return_list[-10:]):.3f}"})
         pbar.update(1)
 
 iteration_list = list(range(len(return_list)))

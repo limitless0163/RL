@@ -1,7 +1,7 @@
 import random
 from pathlib import Path
 
-import gym
+import gymnasium as gym
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
@@ -103,7 +103,7 @@ class SACContinuous:
         self.device = device
 
     def take_action(self, state):
-        state = torch.tensor([state], dtype=torch.float).to(self.device)
+        state = torch.as_tensor(np.asarray([state]), dtype=torch.float).to(self.device)
         action = self.actor(state)[0]
         return [action.item()]
 
@@ -123,24 +123,24 @@ class SACContinuous:
             )
 
     def update(self, transition_dict):
-        states = torch.tensor(transition_dict["states"], dtype=torch.float).to(
-            self.device
-        )
+        states = torch.as_tensor(
+            np.asarray(transition_dict["states"]), dtype=torch.float
+        ).to(self.device)
         actions = (
-            torch.tensor(transition_dict["actions"], dtype=torch.float)
+            torch.as_tensor(np.asarray(transition_dict["actions"]), dtype=torch.float)
             .view(-1, 1)
             .to(self.device)
         )
         rewards = (
-            torch.tensor(transition_dict["rewards"], dtype=torch.float)
+            torch.as_tensor(np.asarray(transition_dict["rewards"]), dtype=torch.float)
             .view(-1, 1)
             .to(self.device)
         )
-        next_states = torch.tensor(
-            transition_dict["next_states"], dtype=torch.float
+        next_states = torch.as_tensor(
+            np.asarray(transition_dict["next_states"]), dtype=torch.float
         ).to(self.device)
         dones = (
-            torch.tensor(transition_dict["dones"], dtype=torch.float)
+            torch.as_tensor(np.asarray(transition_dict["dones"]), dtype=torch.float)
             .view(-1, 1)
             .to(self.device)
         )
@@ -187,7 +187,9 @@ class SACContinuous:
 
 env_name = "Pendulum-v1"
 env = gym.make(env_name)
+assert isinstance(env.observation_space, gym.spaces.Box)
 state_dim = env.observation_space.shape[0]
+assert isinstance(env.action_space, gym.spaces.Box)
 action_dim = env.action_space.shape[0]
 action_bound = env.action_space.high[0]  # 动作最大值
 random.seed(0)
@@ -292,7 +294,7 @@ class CQL:
         self.num_random = num_random  # CQL中的动作采样数
 
     def take_action(self, state):
-        state = torch.tensor([state], dtype=torch.float).to(device)
+        state = torch.as_tensor(np.asarray([state]), dtype=torch.float).to(device)
         action = self.actor(state)[0]
         return [action.item()]
 
@@ -303,22 +305,24 @@ class CQL:
             )
 
     def update(self, transition_dict):
-        states = torch.tensor(transition_dict["states"], dtype=torch.float).to(device)
+        states = torch.as_tensor(
+            np.asarray(transition_dict["states"]), dtype=torch.float
+        ).to(device)
         actions = (
-            torch.tensor(transition_dict["actions"], dtype=torch.float)
+            torch.as_tensor(np.asarray(transition_dict["actions"]), dtype=torch.float)
             .view(-1, 1)
             .to(device)
         )
         rewards = (
-            torch.tensor(transition_dict["rewards"], dtype=torch.float)
+            torch.as_tensor(np.asarray(transition_dict["rewards"]), dtype=torch.float)
             .view(-1, 1)
             .to(device)
         )
-        next_states = torch.tensor(
-            transition_dict["next_states"], dtype=torch.float
+        next_states = torch.as_tensor(
+            np.asarray(transition_dict["next_states"]), dtype=torch.float
         ).to(device)
         dones = (
-            torch.tensor(transition_dict["dones"], dtype=torch.float)
+            torch.as_tensor(np.asarray(transition_dict["dones"]), dtype=torch.float)
             .view(-1, 1)
             .to(device)
         )
@@ -458,17 +462,18 @@ agent = CQL(
 
 return_list = []
 for i in range(10):
-    with tqdm(total=int(num_epochs / 10), desc="Iteration %d" % i) as pbar:
+    with tqdm(total=int(num_epochs / 10), desc=f"Iteration {int(i):d}") as pbar:
         for i_epoch in range(int(num_epochs / 10)):
             # 此处与环境交互只是为了评估策略,最后作图用,不会用于训练
             epoch_return = 0
-            state = env.reset()
+            state, _ = env.reset()
             done = False
             while not done:
                 action = agent.take_action(state)
-                next_state, reward, done, _ = env.step(action)
+                next_state, reward, terminated, truncated, _ = env.step(action)
+                done = terminated or truncated
                 state = next_state
-                epoch_return += reward
+                epoch_return += float(reward)
             return_list.append(epoch_return)
 
             for _ in range(num_trains_per_epoch):
@@ -485,8 +490,8 @@ for i in range(10):
             if (i_epoch + 1) % 10 == 0:
                 pbar.set_postfix(
                     {
-                        "epoch": "%d" % (num_epochs / 10 * i + i_epoch + 1),
-                        "return": "%.3f" % np.mean(return_list[-10:]),
+                        "epoch": f"{int(num_epochs / 10 * i + i_epoch + 1):d}",
+                        "return": f"{np.mean(return_list[-10:]):.3f}",
                     }
                 )
             pbar.update(1)

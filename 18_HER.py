@@ -107,7 +107,7 @@ class DDPG:
         self.device = device
 
     def take_action(self, state):
-        state = torch.tensor([state], dtype=torch.float).to(self.device)
+        state = torch.as_tensor(np.asarray([state]), dtype=torch.float).to(self.device)
         action = self.actor(state).detach().cpu().numpy()[0]
         # 给动作添加噪声，增加探索
         action = action + self.sigma * np.random.randn(self.action_dim)
@@ -120,22 +120,22 @@ class DDPG:
             )
 
     def update(self, transition_dict):
-        states = torch.tensor(transition_dict["states"], dtype=torch.float).to(
-            self.device
-        )
-        actions = torch.tensor(transition_dict["actions"], dtype=torch.float).to(
-            self.device
-        )
+        states = torch.as_tensor(
+            np.asarray(transition_dict["states"]), dtype=torch.float
+        ).to(self.device)
+        actions = torch.as_tensor(
+            np.asarray(transition_dict["actions"]), dtype=torch.float
+        ).to(self.device)
         rewards = (
-            torch.tensor(transition_dict["rewards"], dtype=torch.float)
+            torch.as_tensor(np.asarray(transition_dict["rewards"]), dtype=torch.float)
             .view(-1, 1)
             .to(self.device)
         )
-        next_states = torch.tensor(
-            transition_dict["next_states"], dtype=torch.float
+        next_states = torch.as_tensor(
+            np.asarray(transition_dict["next_states"]), dtype=torch.float
         ).to(self.device)
         dones = (
-            torch.tensor(transition_dict["dones"], dtype=torch.float)
+            torch.as_tensor(np.asarray(transition_dict["dones"]), dtype=torch.float)
             .view(-1, 1)
             .to(self.device)
         )
@@ -189,7 +189,13 @@ class ReplayBuffer_Trajectory:
         return len(self.buffer)
 
     def sample(self, batch_size, use_her, dis_threshold=0.15, her_ratio=0.8):
-        batch = dict(states=[], actions=[], next_states=[], rewards=[], dones=[])
+        batch = {
+            "states": [],
+            "actions": [],
+            "next_states": [],
+            "rewards": [],
+            "dones": [],
+        }
         for _ in range(batch_size):
             traj = random.sample(self.buffer, 1)[0]
             step_state = np.random.randint(traj.length)
@@ -204,7 +210,7 @@ class ReplayBuffer_Trajectory:
                 goal = traj.states[step_goal][:2]  # 使用HER算法的future方案设置目标
                 dis = np.sqrt(np.sum(np.square(next_state[:2] - goal)))
                 reward = -1.0 if dis > dis_threshold else 0
-                done = False if dis > dis_threshold else True
+                done = not dis > dis_threshold
                 state = np.hstack((state[:2], goal))
                 next_state = np.hstack((next_state[:2], goal))
 
@@ -214,10 +220,12 @@ class ReplayBuffer_Trajectory:
             batch["rewards"].append(reward)
             batch["dones"].append(done)
 
-        batch["states"] = np.array(batch["states"])
-        batch["next_states"] = np.array(batch["next_states"])
-        batch["actions"] = np.array(batch["actions"])
-        return batch
+        return {
+            **batch,
+            "states": np.array(batch["states"]),
+            "next_states": np.array(batch["next_states"]),
+            "actions": np.array(batch["actions"]),
+        }
 
 
 actor_lr = 1e-3
@@ -256,7 +264,7 @@ agent = DDPG(
 
 return_list = []
 for i in range(10):
-    with tqdm(total=int(num_episodes / 10), desc="Iteration %d" % i) as pbar:
+    with tqdm(total=int(num_episodes / 10), desc=f"Iteration {int(i):d}") as pbar:
         for i_episode in range(int(num_episodes / 10)):
             episode_return = 0
             state = env.reset()
@@ -265,7 +273,7 @@ for i in range(10):
             while not done:
                 action = agent.take_action(state)
                 state, reward, done = env.step(action)
-                episode_return += reward
+                episode_return += float(reward)
                 traj.store_step(action, state, reward, done)
             replay_buffer.add_trajectory(traj)
             return_list.append(episode_return)
@@ -276,8 +284,8 @@ for i in range(10):
             if (i_episode + 1) % 10 == 0:
                 pbar.set_postfix(
                     {
-                        "episode": "%d" % (num_episodes / 10 * i + i_episode + 1),
-                        "return": "%.3f" % np.mean(return_list[-10:]),
+                        "episode": f"{int(num_episodes / 10 * i + i_episode + 1):d}",
+                        "return": f"{np.mean(return_list[-10:]):.3f}",
                     }
                 )
             pbar.update(1)
@@ -310,7 +318,7 @@ agent = DDPG(
 
 return_list = []
 for i in range(10):
-    with tqdm(total=int(num_episodes / 10), desc="Iteration %d" % i) as pbar:
+    with tqdm(total=int(num_episodes / 10), desc=f"Iteration {int(i):d}") as pbar:
         for i_episode in range(int(num_episodes / 10)):
             episode_return = 0
             state = env.reset()
@@ -319,7 +327,7 @@ for i in range(10):
             while not done:
                 action = agent.take_action(state)
                 state, reward, done = env.step(action)
-                episode_return += reward
+                episode_return += float(reward)
                 traj.store_step(action, state, reward, done)
             replay_buffer.add_trajectory(traj)
             return_list.append(episode_return)
@@ -331,8 +339,8 @@ for i in range(10):
             if (i_episode + 1) % 10 == 0:
                 pbar.set_postfix(
                     {
-                        "episode": "%d" % (num_episodes / 10 * i + i_episode + 1),
-                        "return": "%.3f" % np.mean(return_list[-10:]),
+                        "episode": f"{int(num_episodes / 10 * i + i_episode + 1):d}",
+                        "return": f"{np.mean(return_list[-10:]):.3f}",
                     }
                 )
             pbar.update(1)

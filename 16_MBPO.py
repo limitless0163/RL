@@ -3,7 +3,7 @@ import itertools
 import random
 from pathlib import Path
 
-import gym
+import gymnasium as gym
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
@@ -99,7 +99,7 @@ class SAC:
         self.tau = tau
 
     def take_action(self, state):
-        state = torch.tensor([state], dtype=torch.float).to(device)
+        state = torch.as_tensor(np.asarray([state]), dtype=torch.float).to(device)
         action = self.actor(state)[0]
         return [action.item()]
 
@@ -119,22 +119,24 @@ class SAC:
             )
 
     def update(self, transition_dict):
-        states = torch.tensor(transition_dict["states"], dtype=torch.float).to(device)
+        states = torch.as_tensor(
+            np.asarray(transition_dict["states"]), dtype=torch.float
+        ).to(device)
         actions = (
-            torch.tensor(transition_dict["actions"], dtype=torch.float)
+            torch.as_tensor(np.asarray(transition_dict["actions"]), dtype=torch.float)
             .view(-1, 1)
             .to(device)
         )
         rewards = (
-            torch.tensor(transition_dict["rewards"], dtype=torch.float)
+            torch.as_tensor(np.asarray(transition_dict["rewards"]), dtype=torch.float)
             .view(-1, 1)
             .to(device)
         )
-        next_states = torch.tensor(
-            transition_dict["next_states"], dtype=torch.float
+        next_states = torch.as_tensor(
+            np.asarray(transition_dict["next_states"]), dtype=torch.float
         ).to(device)
         dones = (
-            torch.tensor(transition_dict["dones"], dtype=torch.float)
+            torch.as_tensor(np.asarray(transition_dict["dones"]), dtype=torch.float)
             .view(-1, 1)
             .to(device)
         )
@@ -207,8 +209,12 @@ def init_weights(m):
             )
         return t
 
-    if type(m) == nn.Linear or isinstance(m, FCLayer):
-        truncated_normal_init(m.weight, std=1 / (2 * np.sqrt(m._input_dim)))
+    if isinstance(m, (nn.Linear, FCLayer)):
+        input_dim = m.in_features if isinstance(m, nn.Linear) else m._input_dim
+        with torch.no_grad():
+            m.weight.copy_(
+                truncated_normal_init(m.weight, std=1 / (2 * input_dim**0.5))
+            )
         m.bias.data.fill_(0.0)
 
 
@@ -280,7 +286,7 @@ class EnsembleModel(nn.Module):
             total_loss = torch.sum(mse_loss)
         return total_loss, mse_loss
 
-    def train(self, loss):
+    def optimize(self, loss):
         self.optimizer.zero_grad()
         loss += self._model_alpha * torch.sum(
             self._max_logvar
@@ -337,7 +343,7 @@ class EnsembleDynamicsModel:
 
                 mean, logvar = self.model(train_input, return_log_var=True)
                 loss, _ = self.model.loss(mean, logvar, train_label)
-                self.model.train(loss)
+                self.model.optimize(loss)
 
             with torch.no_grad():
                 mean, logvar = self.model(holdout_inputs, return_log_var=True)
@@ -365,7 +371,7 @@ class EnsembleDynamicsModel:
 
     def predict(self, inputs, batch_size=64):
         inputs = np.tile(inputs, (self._num_network, 1, 1))
-        inputs = torch.tensor(inputs, dtype=torch.float).to(device)
+        inputs = torch.as_tensor(np.asarray(inputs), dtype=torch.float).to(device)
         mean, var = self.model(inputs, return_log_var=False)
         return mean.detach().cpu().numpy(), var.detach().cpu().numpy()
 
@@ -384,7 +390,7 @@ class FakeEnv:
             + np.random.normal(size=ensemble_model_means.shape) * ensemble_model_stds
         )
 
-        num_models, batch_size, _ = ensemble_model_means.shape
+        _num_models, batch_size, _ = ensemble_model_means.shape
         models_to_use = np.random.choice(
             [i for i in range(self.model._num_network)], size=batch_size
         )
@@ -461,7 +467,7 @@ class MBPO:
             self.agent.update(transition_dict)
 
     def train_model(self):
-        obs, action, reward, next_obs, done = self.env_pool.return_all_samples()
+        obs, action, reward, next_obs, _done = self.env_pool.return_all_samples()
         inputs = np.concatenate((obs, action), axis=-1)
         reward = np.array(reward)
         labels = np.concatenate(
@@ -477,13 +483,13 @@ class MBPO:
             done = terminated or truncated
             self.env_pool.add(obs, action, reward, next_obs, done)
             obs = next_obs
-            episode_return += reward
+            episode_return += float(reward)
         return episode_return
 
     def train(self):
         return_list = []
         explore_return = self.explore()  # 随机探索采取数据
-        print("episode: 1, return: %d" % explore_return)
+        print(f"episode: 1, return: {int(explore_return):d}")
         return_list.append(explore_return)
 
         for i_episode in range(self.num_episode - 1):
@@ -498,12 +504,12 @@ class MBPO:
                 done = terminated or truncated
                 self.env_pool.add(obs, action, reward, next_obs, done)
                 obs = next_obs
-                episode_return += reward
+                episode_return += float(reward)
 
                 self.update_agent()
                 step += 1
             return_list.append(episode_return)
-            print("episode: %d, return: %d" % (i_episode + 2, episode_return))
+            print(f"episode: {int(i_episode + 2):d}, return: {int(episode_return):d}")
         return return_list
 
 
@@ -544,7 +550,9 @@ tau = 0.005  # 软更新参数
 buffer_size = 10000
 target_entropy = -1
 model_alpha = 0.01  # 模型损失函数中的加权权重
+assert isinstance(env.observation_space, gym.spaces.Box)
 state_dim = env.observation_space.shape[0]
+assert isinstance(env.action_space, gym.spaces.Box)
 action_dim = env.action_space.shape[0]
 action_bound = env.action_space.high[0]  # 动作最大值
 

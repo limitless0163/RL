@@ -6,7 +6,7 @@ import numpy as np
 class BernoulliBandit:
     """伯努利多臂老虎机,输入K表示拉杆个数"""
 
-    def __init__(self, K):
+    def __init__(self, K: int):
         self.probs = np.random.uniform(
             size=K
         )  # 随机生成K个0～1的数,作为拉动每根拉杆的获奖
@@ -27,10 +27,9 @@ class BernoulliBandit:
 np.random.seed(1)  # 设定随机种子,使实验具有可重复性
 K = 10
 bandit_10_arm = BernoulliBandit(K)
-print("随机生成了一个%d臂伯努利老虎机" % K)
+print(f"随机生成了一个{int(K):d}臂伯努利老虎机")
 print(
-    "获奖概率最大的拉杆为%d号,其获奖概率为%.4f"
-    % (bandit_10_arm.best_idx, bandit_10_arm.best_prob)
+    f"获奖概率最大的拉杆为{int(bandit_10_arm.best_idx):d}号,其获奖概率为{bandit_10_arm.best_prob:.4f}"
 )
 
 # 随机生成了一个10臂伯努利老虎机
@@ -92,7 +91,7 @@ def plot_results(solvers, solver_names):
         plt.plot(time_list, solver.regrets, label=solver_names[idx])
     plt.xlabel("Time steps")
     plt.ylabel("Cumulative regrets")
-    plt.title("%d-armed bandit" % solvers[0].bandit.K)
+    plt.title(f"{int(solvers[0].bandit.K):d}-armed bandit")
     plt.legend()
     plt.show()
 

@@ -1,6 +1,6 @@
 import random
 
-import gym
+import gymnasium as gym
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
@@ -53,29 +53,35 @@ class DQN:
         if np.random.random() < self.epsilon:
             action = np.random.randint(self.action_dim)
         else:
-            state = torch.tensor([state], dtype=torch.float).to(self.device)
+            state = torch.as_tensor(np.asarray([state]), dtype=torch.float).to(
+                self.device
+            )
             action = self.q_net(state).argmax().item()
         return action
 
     def max_q_value(self, state):
-        state = torch.tensor([state], dtype=torch.float).to(self.device)
+        state = torch.as_tensor(np.asarray([state]), dtype=torch.float).to(self.device)
         return self.q_net(state).max().item()
 
     def update(self, transition_dict):
-        states = torch.tensor(transition_dict["states"], dtype=torch.float).to(
-            self.device
-        )
-        actions = torch.tensor(transition_dict["actions"]).view(-1, 1).to(self.device)
-        rewards = (
-            torch.tensor(transition_dict["rewards"], dtype=torch.float)
+        states = torch.as_tensor(
+            np.asarray(transition_dict["states"]), dtype=torch.float
+        ).to(self.device)
+        actions = (
+            torch.as_tensor(np.asarray(transition_dict["actions"]))
             .view(-1, 1)
             .to(self.device)
         )
-        next_states = torch.tensor(
-            transition_dict["next_states"], dtype=torch.float
+        rewards = (
+            torch.as_tensor(np.asarray(transition_dict["rewards"]), dtype=torch.float)
+            .view(-1, 1)
+            .to(self.device)
+        )
+        next_states = torch.as_tensor(
+            np.asarray(transition_dict["next_states"]), dtype=torch.float
         ).to(self.device)
         dones = (
-            torch.tensor(transition_dict["dones"], dtype=torch.float)
+            torch.as_tensor(np.asarray(transition_dict["dones"]), dtype=torch.float)
             .view(-1, 1)
             .to(self.device)
         )
@@ -109,14 +115,16 @@ minimal_size = 1000
 batch_size = 64
 device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
 
-env_name = "Pendulum-v0"
+env_name = "Pendulum-v1"
 env = gym.make(env_name)
+assert isinstance(env.observation_space, gym.spaces.Box)
 state_dim = env.observation_space.shape[0]
 action_dim = 11  # 将连续动作分成11个离散动作
 
 
 def dis_to_con(discrete_action, env, action_dim):  # 离散动作转回连续的函数
     action_lowbound = env.action_space.low[0]  # 连续动作的最小值
+    assert isinstance(env.action_space, gym.spaces.Box)
     action_upbound = env.action_space.high[0]  # 连续动作的最大值
     return action_lowbound + (discrete_action / (action_dim - 1)) * (
         action_upbound - action_lowbound
@@ -128,10 +136,10 @@ def train_DQN(agent, env, num_episodes, replay_buffer, minimal_size, batch_size)
     max_q_value_list = []
     max_q_value = 0
     for i in range(10):
-        with tqdm(total=int(num_episodes / 10), desc="Iteration %d" % i) as pbar:
+        with tqdm(total=int(num_episodes / 10), desc=f"Iteration {int(i):d}") as pbar:
             for i_episode in range(int(num_episodes / 10)):
                 episode_return = 0
-                state = env.reset()
+                state, _ = env.reset()
                 done = False
                 while not done:
                     action = agent.take_action(state)
@@ -140,10 +148,13 @@ def train_DQN(agent, env, num_episodes, replay_buffer, minimal_size, batch_size)
                     )  # 平滑处理
                     max_q_value_list.append(max_q_value)  # 保存每个状态的最大Q值
                     action_continuous = dis_to_con(action, env, agent.action_dim)
-                    next_state, reward, done, _ = env.step([action_continuous])
+                    next_state, reward, terminated, truncated, _ = env.step(
+                        [action_continuous]
+                    )
+                    done = terminated or truncated
                     replay_buffer.add(state, action, reward, next_state, done)
                     state = next_state
-                    episode_return += reward
+                    episode_return += float(reward)
                     if replay_buffer.size() > minimal_size:
                         b_s, b_a, b_r, b_ns, b_d = replay_buffer.sample(batch_size)
                         transition_dict = {
@@ -158,8 +169,8 @@ def train_DQN(agent, env, num_episodes, replay_buffer, minimal_size, batch_size)
                 if (i_episode + 1) % 10 == 0:
                     pbar.set_postfix(
                         {
-                            "episode": "%d" % (num_episodes / 10 * i + i_episode + 1),
-                            "return": "%.3f" % np.mean(return_list[-10:]),
+                            "episode": f"{int(num_episodes / 10 * i + i_episode + 1):d}",
+                            "return": f"{np.mean(return_list[-10:]):.3f}",
                         }
                     )
                 pbar.update(1)
@@ -168,7 +179,7 @@ def train_DQN(agent, env, num_episodes, replay_buffer, minimal_size, batch_size)
 
 random.seed(0)
 np.random.seed(0)
-env.seed(0)
+env.reset(seed=0)
 torch.manual_seed(0)
 replay_buffer = rl_utils.ReplayBuffer(buffer_size)
 agent = DQN(
@@ -197,7 +208,7 @@ plt.show()
 
 random.seed(0)
 np.random.seed(0)
-env.seed(0)
+env.reset(seed=0)
 torch.manual_seed(0)
 replay_buffer = rl_utils.ReplayBuffer(buffer_size)
 agent = DQN(
@@ -249,7 +260,7 @@ class VAnet(torch.nn.Module):
         return Q
 
 
-class DQN:
+class DuelingDQN:
     """DQN算法,包括Double DQN和Dueling DQN"""
 
     def __init__(
@@ -283,29 +294,35 @@ class DQN:
         if np.random.random() < self.epsilon:
             action = np.random.randint(self.action_dim)
         else:
-            state = torch.tensor([state], dtype=torch.float).to(self.device)
+            state = torch.as_tensor(np.asarray([state]), dtype=torch.float).to(
+                self.device
+            )
             action = self.q_net(state).argmax().item()
         return action
 
     def max_q_value(self, state):
-        state = torch.tensor([state], dtype=torch.float).to(self.device)
+        state = torch.as_tensor(np.asarray([state]), dtype=torch.float).to(self.device)
         return self.q_net(state).max().item()
 
     def update(self, transition_dict):
-        states = torch.tensor(transition_dict["states"], dtype=torch.float).to(
-            self.device
-        )
-        actions = torch.tensor(transition_dict["actions"]).view(-1, 1).to(self.device)
-        rewards = (
-            torch.tensor(transition_dict["rewards"], dtype=torch.float)
+        states = torch.as_tensor(
+            np.asarray(transition_dict["states"]), dtype=torch.float
+        ).to(self.device)
+        actions = (
+            torch.as_tensor(np.asarray(transition_dict["actions"]))
             .view(-1, 1)
             .to(self.device)
         )
-        next_states = torch.tensor(
-            transition_dict["next_states"], dtype=torch.float
+        rewards = (
+            torch.as_tensor(np.asarray(transition_dict["rewards"]), dtype=torch.float)
+            .view(-1, 1)
+            .to(self.device)
+        )
+        next_states = torch.as_tensor(
+            np.asarray(transition_dict["next_states"]), dtype=torch.float
         ).to(self.device)
         dones = (
-            torch.tensor(transition_dict["dones"], dtype=torch.float)
+            torch.as_tensor(np.asarray(transition_dict["dones"]), dtype=torch.float)
             .view(-1, 1)
             .to(self.device)
         )
@@ -329,10 +346,10 @@ class DQN:
 
 random.seed(0)
 np.random.seed(0)
-env.seed(0)
+env.reset(seed=0)
 torch.manual_seed(0)
 replay_buffer = rl_utils.ReplayBuffer(buffer_size)
-agent = DQN(
+agent = DuelingDQN(
     state_dim,
     hidden_dim,
     action_dim,

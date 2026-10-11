@@ -1,7 +1,7 @@
 import random
 from pathlib import Path
 
-import gym
+import gymnasium as gym
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
@@ -76,7 +76,7 @@ class DDPG:
         self.device = device
 
     def take_action(self, state):
-        state = torch.tensor([state], dtype=torch.float).to(self.device)
+        state = torch.as_tensor(np.asarray([state]), dtype=torch.float).to(self.device)
         action = self.actor(state).item()
         # 给动作添加噪声，增加探索
         action = action + self.sigma * np.random.randn(self.action_dim)
@@ -89,24 +89,24 @@ class DDPG:
             )
 
     def update(self, transition_dict):
-        states = torch.tensor(transition_dict["states"], dtype=torch.float).to(
-            self.device
-        )
+        states = torch.as_tensor(
+            np.asarray(transition_dict["states"]), dtype=torch.float
+        ).to(self.device)
         actions = (
-            torch.tensor(transition_dict["actions"], dtype=torch.float)
+            torch.as_tensor(np.asarray(transition_dict["actions"]), dtype=torch.float)
             .view(-1, 1)
             .to(self.device)
         )
         rewards = (
-            torch.tensor(transition_dict["rewards"], dtype=torch.float)
+            torch.as_tensor(np.asarray(transition_dict["rewards"]), dtype=torch.float)
             .view(-1, 1)
             .to(self.device)
         )
-        next_states = torch.tensor(
-            transition_dict["next_states"], dtype=torch.float
+        next_states = torch.as_tensor(
+            np.asarray(transition_dict["next_states"]), dtype=torch.float
         ).to(self.device)
         dones = (
-            torch.tensor(transition_dict["dones"], dtype=torch.float)
+            torch.as_tensor(np.asarray(transition_dict["dones"]), dtype=torch.float)
             .view(-1, 1)
             .to(self.device)
         )
@@ -146,7 +146,9 @@ np.random.seed(0)
 env.reset(seed=0)
 torch.manual_seed(0)
 replay_buffer = rl_utils.ReplayBuffer(buffer_size)
+assert isinstance(env.observation_space, gym.spaces.Box)
 state_dim = env.observation_space.shape[0]
+assert isinstance(env.action_space, gym.spaces.Box)
 action_dim = env.action_space.shape[0]
 action_bound = env.action_space.high[0]  # 动作最大值
 agent = DDPG(

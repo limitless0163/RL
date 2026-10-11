@@ -1,7 +1,8 @@
 from pathlib import Path
 
-import gym
+import gymnasium as gym
 import matplotlib.pyplot as plt
+import numpy as np
 import torch
 import torch.nn.functional as F
 
@@ -60,27 +61,31 @@ class PPO:
         self.device = device
 
     def take_action(self, state):
-        state = torch.tensor([state], dtype=torch.float).to(self.device)
+        state = torch.as_tensor(np.asarray([state]), dtype=torch.float).to(self.device)
         probs = self.actor(state)
         action_dist = torch.distributions.Categorical(probs)
         action = action_dist.sample()
         return action.item()
 
     def update(self, transition_dict):
-        states = torch.tensor(transition_dict["states"], dtype=torch.float).to(
-            self.device
-        )
-        actions = torch.tensor(transition_dict["actions"]).view(-1, 1).to(self.device)
-        rewards = (
-            torch.tensor(transition_dict["rewards"], dtype=torch.float)
+        states = torch.as_tensor(
+            np.asarray(transition_dict["states"]), dtype=torch.float
+        ).to(self.device)
+        actions = (
+            torch.as_tensor(np.asarray(transition_dict["actions"]))
             .view(-1, 1)
             .to(self.device)
         )
-        next_states = torch.tensor(
-            transition_dict["next_states"], dtype=torch.float
+        rewards = (
+            torch.as_tensor(np.asarray(transition_dict["rewards"]), dtype=torch.float)
+            .view(-1, 1)
+            .to(self.device)
+        )
+        next_states = torch.as_tensor(
+            np.asarray(transition_dict["next_states"]), dtype=torch.float
         ).to(self.device)
         dones = (
-            torch.tensor(transition_dict["dones"], dtype=torch.float)
+            torch.as_tensor(np.asarray(transition_dict["dones"]), dtype=torch.float)
             .view(-1, 1)
             .to(self.device)
         )
@@ -118,11 +123,13 @@ epochs = 10
 eps = 0.2
 device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
 
-env_name = "CartPole-v0"
+env_name = "CartPole-v1"
 env = gym.make(env_name)
 env.reset(seed=0)
 torch.manual_seed(0)
+assert isinstance(env.observation_space, gym.spaces.Box)
 state_dim = env.observation_space.shape[0]
+assert isinstance(env.action_space, gym.spaces.Discrete)
 action_dim = env.action_space.n
 agent = PPO(
     state_dim,
@@ -199,31 +206,31 @@ class PPOContinuous:
         self.device = device
 
     def take_action(self, state):
-        state = torch.tensor([state], dtype=torch.float).to(self.device)
+        state = torch.as_tensor(np.asarray([state]), dtype=torch.float).to(self.device)
         mu, sigma = self.actor(state)
         action_dist = torch.distributions.Normal(mu, sigma)
         action = action_dist.sample()
         return [action.item()]
 
     def update(self, transition_dict):
-        states = torch.tensor(transition_dict["states"], dtype=torch.float).to(
-            self.device
-        )
+        states = torch.as_tensor(
+            np.asarray(transition_dict["states"]), dtype=torch.float
+        ).to(self.device)
         actions = (
-            torch.tensor(transition_dict["actions"], dtype=torch.float)
+            torch.as_tensor(np.asarray(transition_dict["actions"]), dtype=torch.float)
             .view(-1, 1)
             .to(self.device)
         )
         rewards = (
-            torch.tensor(transition_dict["rewards"], dtype=torch.float)
+            torch.as_tensor(np.asarray(transition_dict["rewards"]), dtype=torch.float)
             .view(-1, 1)
             .to(self.device)
         )
-        next_states = torch.tensor(
-            transition_dict["next_states"], dtype=torch.float
+        next_states = torch.as_tensor(
+            np.asarray(transition_dict["next_states"]), dtype=torch.float
         ).to(self.device)
         dones = (
-            torch.tensor(transition_dict["dones"], dtype=torch.float)
+            torch.as_tensor(np.asarray(transition_dict["dones"]), dtype=torch.float)
             .view(-1, 1)
             .to(self.device)
         )
@@ -271,7 +278,9 @@ env_name = "Pendulum-v1"
 env = gym.make(env_name)
 env.reset(seed=0)
 torch.manual_seed(0)
+assert isinstance(env.observation_space, gym.spaces.Box)
 state_dim = env.observation_space.shape[0]
+assert isinstance(env.action_space, gym.spaces.Box)
 action_dim = env.action_space.shape[0]  # 连续动作空间
 agent = PPOContinuous(
     state_dim,

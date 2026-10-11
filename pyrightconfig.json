@@ -1,0 +1,5 @@
+{
+    "include": ["*.py", "envs", "tests"],
+    "pythonVersion": "3.11",
+    "typeCheckingMode": "basic"
+}

@@ -28,7 +28,7 @@ def compute_return(start_index, chain, gamma):
 chain = [1, 2, 3, 6]
 start_index = 0
 G = compute_return(start_index, chain, gamma)
-print("根据本序列计算得到回报为：%s。" % G)
+print(f"根据本序列计算得到回报为：{G}。")
 
 # 根据本序列计算得到回报为：-2.5。
 
@@ -134,7 +134,7 @@ print("MDP中每个状态价值分别为\n", V)
 
 def sample(MDP, Pi, timestep_max, number):
     """采样函数,策略Pi,限制最长时间步timestep_max,总共采样序列数number"""
-    S, A, P, R, gamma = MDP
+    S, A, P, R, _gamma = MDP
     episodes = []
     for _ in range(number):
         episode = []
@@ -143,15 +143,17 @@ def sample(MDP, Pi, timestep_max, number):
         # 当前状态为终止状态或者时间步太长时,一次采样结束
         while s != "s5" and timestep <= timestep_max:
             timestep += 1
+            a = A[-1]  # 浮点累计误差时使用最后一个动作
             rand, temp = np.random.rand(), 0
             # 在状态s下根据策略选择动作
             for a_opt in A:
                 temp += Pi.get(join(s, a_opt), 0)
                 if temp > rand:
                     a = a_opt
-                    r = R.get(join(s, a), 0)
                     break
+            r = R.get(join(s, a), 0)
             rand, temp = np.random.rand(), 0
+            s_next = S[-1]  # 浮点累计误差时使用最后一个状态
             # 根据状态转移概率得到下一个状态s_next
             for s_opt in S:
                 temp += P.get(join(join(s, a), s_opt), 0)
@@ -183,7 +185,7 @@ def MC(episodes, V, N, gamma):
     for episode in episodes:
         G = 0
         for i in range(len(episode) - 1, -1, -1):  # 一个序列从后往前计算
-            (s, a, r, s_next) = episode[i]
+            (s, _a, r, _s_next) = episode[i]
             G = r + gamma * G
             N[s] = N[s] + 1
             V[s] = V[s] + (G - V[s]) / N[s]
@@ -210,7 +212,7 @@ def occupancy(episodes, s, a, timestep_max, gamma):
     occur_times = np.zeros(timestep_max)  # 记录(s_t,a_t)=(s,a)的次数
     for episode in episodes:
         for i in range(len(episode)):
-            (s_opt, a_opt, r, s_next) = episode[i]
+            (s_opt, a_opt, _r, _s_next) = episode[i]
             total_times[i] += 1
             if s == s_opt and a == a_opt:
                 occur_times[i] += 1

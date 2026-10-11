@@ -2,7 +2,7 @@ import collections
 import itertools
 from pathlib import Path
 
-import gym
+import gymnasium as gym
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
@@ -82,8 +82,12 @@ def init_weights(m):
             )
         return t
 
-    if type(m) == nn.Linear or isinstance(m, FCLayer):
-        truncated_normal_init(m.weight, std=1 / (2 * np.sqrt(m._input_dim)))
+    if isinstance(m, (nn.Linear, FCLayer)):
+        input_dim = m.in_features if isinstance(m, nn.Linear) else m._input_dim
+        with torch.no_grad():
+            m.weight.copy_(
+                truncated_normal_init(m.weight, std=1 / (2 * input_dim**0.5))
+            )
         m.bias.data.fill_(0.0)
 
 
@@ -152,7 +156,7 @@ class EnsembleModel(nn.Module):
             total_loss = torch.sum(mse_loss)
         return total_loss, mse_loss
 
-    def train(self, loss):
+    def optimize(self, loss):
         self.optimizer.zero_grad()
         loss += 0.01 * torch.sum(self._max_logvar) - 0.01 * torch.sum(self._min_logvar)
         loss.backward()
@@ -205,7 +209,7 @@ class EnsembleDynamicsModel:
 
                 mean, logvar = self.model(train_input, return_log_var=True)
                 loss, _ = self.model.loss(mean, logvar, train_label)
-                self.model.train(loss)
+                self.model.optimize(loss)
 
             with torch.no_grad():
                 mean, logvar = self.model(holdout_inputs, return_log_var=True)
@@ -262,7 +266,7 @@ class FakeEnv:
             + np.random.normal(size=ensemble_model_means.shape) * ensemble_model_stds
         )
 
-        num_models, batch_size, _ = ensemble_model_means.shape
+        _num_models, batch_size, _ = ensemble_model_means.shape
         models_to_use = np.random.choice(
             [i for i in range(self.model._num_network)], size=batch_size
         )
@@ -309,7 +313,9 @@ class PETS:
         self._env = env
         self._env_pool = ReplayBuffer(buffer_size)
 
+        assert isinstance(env.observation_space, gym.spaces.Box)
         obs_dim = env.observation_space.shape[0]
+        assert isinstance(env.action_space, gym.spaces.Box)
         self._action_dim = env.action_space.shape[0]
         self._model = EnsembleDynamicsModel(obs_dim, self._action_dim)
         self._fake_env = FakeEnv(self._model)
@@ -345,7 +351,7 @@ class PETS:
             done = terminated or truncated
             self._env_pool.add(obs, action, reward, next_obs, done)
             obs = next_obs
-            episode_return += reward
+            episode_return += float(reward)
             mean = np.concatenate(
                 [np.copy(actions)[self._action_dim :], np.zeros(self._action_dim)]
             )
@@ -359,20 +365,20 @@ class PETS:
             done = terminated or truncated
             self._env_pool.add(obs, action, reward, next_obs, done)
             obs = next_obs
-            episode_return += reward
+            episode_return += float(reward)
         return episode_return
 
     def train(self):
         return_list = []
         explore_return = self.explore()  # 先进行随机策略的探索来收集一条序列的数据
-        print("episode: 1, return: %d" % explore_return)
+        print(f"episode: 1, return: {int(explore_return):d}")
         return_list.append(explore_return)
 
         for i_episode in range(self.num_episodes - 1):
             self.train_model()
             episode_return = self.mpc()
             return_list.append(episode_return)
-            print("episode: %d, return: %d" % (i_episode + 2, episode_return))
+            print(f"episode: {int(i_episode + 2):d}, return: {int(episode_return):d}")
         return return_list
 
 

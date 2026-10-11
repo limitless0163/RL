@@ -6,8 +6,10 @@ numpy>=1.26,<2
 matplotlib>=3.8,<4
 scipy>=1.11,<2
 torch==2.14.1+cu130
-gym==0.26.2
 gymnasium[classic-control]>=1.0,<2
 tqdm>=4.66,<5
 ipykernel>=6,<8
 ruff>=0.16,<0.17
+mpe2>=1.1,<2
+pillow>=10,<13
+pyright>=1.1.414,<2

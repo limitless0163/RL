@@ -1,8 +1,9 @@
 import copy
 from pathlib import Path
 
-import gym
+import gymnasium as gym
 import matplotlib.pyplot as plt
+import numpy as np
 import torch
 import torch.nn.functional as F
 
@@ -13,14 +14,16 @@ PIC_DIR.mkdir(parents=True, exist_ok=True)
 
 
 def compute_advantage(gamma, lmbda, td_delta):
-    td_delta = td_delta.detach().numpy()
+    td_delta = td_delta.detach()
+    if td_delta.numel() == 0:
+        return td_delta.to(dtype=torch.float)
     advantage_list = []
     advantage = 0.0
-    for delta in td_delta[::-1]:
+    for delta in td_delta.flip(0):
         advantage = gamma * lmbda * advantage + delta
         advantage_list.append(advantage)
     advantage_list.reverse()
-    return torch.tensor(advantage_list, dtype=torch.float)
+    return torch.stack(advantage_list).to(dtype=torch.float)
 
 
 class PolicyNet(torch.nn.Module):
@@ -76,7 +79,7 @@ class TRPO:
         self.device = device
 
     def take_action(self, state):
-        state = torch.as_tensor([state], dtype=torch.float32)
+        state = torch.as_tensor(np.asarray([state]), dtype=torch.float32)
         with torch.inference_mode():
             probs = self.action_actor(state)
             action_dist = torch.distributions.Categorical(probs)
@@ -89,11 +92,15 @@ class TRPO:
         kl = torch.mean(
             torch.distributions.kl.kl_divergence(old_action_dists, new_action_dists)
         )  # 计算平均KL距离
-        kl_grad = torch.autograd.grad(kl, self.actor.parameters(), create_graph=True)
+        kl_grad = torch.autograd.grad(
+            kl, tuple(self.actor.parameters()), create_graph=True
+        )
         kl_grad_vector = torch.cat([grad.view(-1) for grad in kl_grad])
         # KL距离的梯度先和向量进行点积运算
         kl_grad_vector_product = torch.dot(kl_grad_vector, vector)
-        grad2 = torch.autograd.grad(kl_grad_vector_product, self.actor.parameters())
+        grad2 = torch.autograd.grad(
+            kl_grad_vector_product, tuple(self.actor.parameters())
+        )
         grad2_vector = torch.cat([grad.view(-1) for grad in grad2])
         return grad2_vector
 
@@ -155,7 +162,7 @@ class TRPO:
         surrogate_obj = self.compute_surrogate_obj(
             states, actions, advantage, old_log_probs, self.actor
         )
-        grads = torch.autograd.grad(surrogate_obj, self.actor.parameters())
+        grads = torch.autograd.grad(surrogate_obj, tuple(self.actor.parameters()))
         obj_grad = torch.cat([grad.view(-1) for grad in grads]).detach()
         # 用共轭梯度法计算x = H^(-1)g
         descent_direction = self.conjugate_gradient(obj_grad, states, old_action_dists)
@@ -179,20 +186,24 @@ class TRPO:
         )  # 用线性搜索后的参数更新策略
 
     def update(self, transition_dict):
-        states = torch.tensor(transition_dict["states"], dtype=torch.float).to(
-            self.device
-        )
-        actions = torch.tensor(transition_dict["actions"]).view(-1, 1).to(self.device)
-        rewards = (
-            torch.tensor(transition_dict["rewards"], dtype=torch.float)
+        states = torch.as_tensor(
+            np.asarray(transition_dict["states"]), dtype=torch.float
+        ).to(self.device)
+        actions = (
+            torch.as_tensor(np.asarray(transition_dict["actions"]))
             .view(-1, 1)
             .to(self.device)
         )
-        next_states = torch.tensor(
-            transition_dict["next_states"], dtype=torch.float
+        rewards = (
+            torch.as_tensor(np.asarray(transition_dict["rewards"]), dtype=torch.float)
+            .view(-1, 1)
+            .to(self.device)
+        )
+        next_states = torch.as_tensor(
+            np.asarray(transition_dict["next_states"]), dtype=torch.float
         ).to(self.device)
         dones = (
-            torch.tensor(transition_dict["dones"], dtype=torch.float)
+            torch.as_tensor(np.asarray(transition_dict["dones"]), dtype=torch.float)
             .view(-1, 1)
             .to(self.device)
         )
@@ -222,7 +233,7 @@ kl_constraint = 0.0005
 alpha = 0.5
 device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
 
-env_name = "CartPole-v0"
+env_name = "CartPole-v1"
 env = gym.make(env_name)
 env.reset(seed=0)
 torch.manual_seed(0)
@@ -302,7 +313,7 @@ class TRPOContinuous:
         self.device = device
 
     def take_action(self, state):
-        state = torch.as_tensor([state], dtype=torch.float32)
+        state = torch.as_tensor(np.asarray([state]), dtype=torch.float32)
         with torch.inference_mode():
             mu, std = self.action_actor(state)
             action_dist = torch.distributions.Normal(mu, std)
@@ -317,10 +328,14 @@ class TRPOContinuous:
         kl = torch.mean(
             torch.distributions.kl.kl_divergence(old_action_dists, new_action_dists)
         )
-        kl_grad = torch.autograd.grad(kl, self.actor.parameters(), create_graph=True)
+        kl_grad = torch.autograd.grad(
+            kl, tuple(self.actor.parameters()), create_graph=True
+        )
         kl_grad_vector = torch.cat([grad.view(-1) for grad in kl_grad])
         kl_grad_vector_product = torch.dot(kl_grad_vector, vector)
-        grad2 = torch.autograd.grad(kl_grad_vector_product, self.actor.parameters())
+        grad2 = torch.autograd.grad(
+            kl_grad_vector_product, tuple(self.actor.parameters())
+        )
         grad2_vector = torch.cat([grad.contiguous().view(-1) for grad in grad2])
         return grad2_vector + damping * vector
 
@@ -381,7 +396,7 @@ class TRPOContinuous:
         surrogate_obj = self.compute_surrogate_obj(
             states, actions, advantage, old_log_probs, self.actor
         )
-        grads = torch.autograd.grad(surrogate_obj, self.actor.parameters())
+        grads = torch.autograd.grad(surrogate_obj, tuple(self.actor.parameters()))
         obj_grad = torch.cat([grad.view(-1) for grad in grads]).detach()
         descent_direction = self.conjugate_gradient(obj_grad, states, old_action_dists)
         Hd = self.hessian_matrix_vector_product(
@@ -403,24 +418,24 @@ class TRPOContinuous:
         )
 
     def update(self, transition_dict):
-        states = torch.tensor(transition_dict["states"], dtype=torch.float).to(
-            self.device
-        )
+        states = torch.as_tensor(
+            np.asarray(transition_dict["states"]), dtype=torch.float
+        ).to(self.device)
         actions = (
-            torch.tensor(transition_dict["actions"], dtype=torch.float)
+            torch.as_tensor(np.asarray(transition_dict["actions"]), dtype=torch.float)
             .view(-1, 1)
             .to(self.device)
         )
         rewards = (
-            torch.tensor(transition_dict["rewards"], dtype=torch.float)
+            torch.as_tensor(np.asarray(transition_dict["rewards"]), dtype=torch.float)
             .view(-1, 1)
             .to(self.device)
         )
-        next_states = torch.tensor(
-            transition_dict["next_states"], dtype=torch.float
+        next_states = torch.as_tensor(
+            np.asarray(transition_dict["next_states"]), dtype=torch.float
         ).to(self.device)
         dones = (
-            torch.tensor(transition_dict["dones"], dtype=torch.float)
+            torch.as_tensor(np.asarray(transition_dict["dones"]), dtype=torch.float)
             .view(-1, 1)
             .to(self.device)
         )

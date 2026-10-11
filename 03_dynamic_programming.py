@@ -1,4 +1,7 @@
 import copy
+from typing import cast
+
+from gymnasium.envs.toy_text.frozen_lake import FrozenLakeEnv
 
 
 class CliffWalkingEnv:
@@ -70,7 +73,7 @@ class PolicyIteration:
             if max_diff < self.theta:
                 break  # 满足收敛条件,退出评估迭代
             cnt += 1
-        print("策略评估进行%d轮后完成" % cnt)
+        print(f"策略评估进行{int(cnt):d}轮后完成")
 
     def policy_improvement(self):  # 策略提升
         for s in range(self.env.nrow * self.env.ncol):
@@ -97,12 +100,16 @@ class PolicyIteration:
                 break
 
 
-def print_agent(agent, action_meaning, disaster=[], end=[]):
+def print_agent(agent, action_meaning, disaster=None, end=None):
+    if end is None:
+        end = []
+    if disaster is None:
+        disaster = []
     print("状态价值：")
     for i in range(agent.env.nrow):
         for j in range(agent.env.ncol):
             # 为了输出美观,保持输出6个字符
-            print("%6.6s" % ("%.3f" % agent.v[i * agent.env.ncol + j]), end=" ")
+            print("{:>6.6s}".format(f"{agent.v[i * agent.env.ncol + j]:.3f}"), end=" ")
         print()
 
     print("策略：")
@@ -161,7 +168,7 @@ class ValueIteration:
         self.theta = theta  # 价值收敛阈值
         self.gamma = gamma
         # 价值迭代结束后得到的策略
-        self.pi = [None for i in range(self.env.ncol * self.env.nrow)]
+        self.pi: list[list[float]] = [[] for _ in range(self.env.ncol * self.env.nrow)]
 
     def value_iteration(self):
         cnt = 0
@@ -184,7 +191,7 @@ class ValueIteration:
             if max_diff < self.theta:
                 break  # 满足收敛条件,退出评估迭代
             cnt += 1
-        print("价值迭代一共进行%d轮" % cnt)
+        print(f"价值迭代一共进行{int(cnt):d}轮")
         self.get_policy()
 
     def get_policy(self):  # 根据价值函数导出一个贪婪策略
@@ -222,11 +229,12 @@ class ValueIteration:
 # ooo> ooo> ooo> ooo> ooo> ooo> ooo> ooo> ooo> ooo> ooo> ovoo
 # ^ooo **** **** **** **** **** **** **** **** **** **** EEEE
 
-import gym
+import gymnasium as gym
 
-env = gym.make("FrozenLake-v0")  # 创建环境
-env = env.unwrapped  # 解封装才能访问状态转移矩阵P
-env.render()  # 环境渲染,通常是弹窗显示或打印出可视化的环境
+env = gym.make("FrozenLake-v1", render_mode="ansi")  # 创建环境
+env = cast(FrozenLakeEnv, env.unwrapped)  # 解封装才能访问状态转移矩阵P
+env.reset(seed=0)
+print(env.render())  # 环境渲染,通常是弹窗显示或打印出可视化的环境
 
 holes = set()
 ends = set()
