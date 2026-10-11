@@ -1,7 +1,7 @@
 import collections
 import random
 
-import gymnasium as gym
+import gym
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
@@ -15,20 +15,17 @@ class ReplayBuffer:
     """经验回放池"""
 
     def __init__(self, capacity):
-        self.buffer = collections.deque(maxlen=capacity)  # 队列，先进先出
+        self.buffer = collections.deque(maxlen=capacity)  # 队列,先进先出
 
-    def add(self, state, action, reward, next_state, done):
-        """将数据加入buffer"""
+    def add(self, state, action, reward, next_state, done):  # 将数据加入buffer
         self.buffer.append((state, action, reward, next_state, done))
 
-    def sample(self, batch_size):
-        """从buffer中采样数据，数量为batch_size"""
+    def sample(self, batch_size):  # 从buffer中采样数据,数量为batch_size
         transitions = random.sample(self.buffer, batch_size)
         state, action, reward, next_state, done = zip(*transitions)
         return np.array(state), action, reward, np.array(next_state), done
 
-    def size(self):
-        """目前buffer中数据的数量"""
+    def size(self):  # 目前buffer中数据的数量
         return len(self.buffer)
 
 
@@ -41,7 +38,7 @@ class Qnet(torch.nn.Module):
         self.fc2 = torch.nn.Linear(hidden_dim, action_dim)
 
     def forward(self, x):
-        x = F.relu(self.fc1(x))  # 隐藏层使用Relu激活函数
+        x = F.relu(self.fc1(x))  # 隐藏层使用ReLU激活函数
         return self.fc2(x)
 
 
@@ -68,11 +65,10 @@ class DQN:
         self.gamma = gamma  # 折扣因子
         self.epsilon = epsilon  # epsilon-贪婪策略
         self.target_update = target_update  # 目标网络更新频率
-        self.count = 0  # 计数器，记录更新次数
+        self.count = 0  # 计数器,记录更新次数
         self.device = device
 
-    def take_action(self, state):
-        """epsilon-贪婪策略采取动作"""
+    def take_action(self, state):  # epsilon-贪婪策略采取动作
         if np.random.random() < self.epsilon:
             action = np.random.randint(self.action_dim)
         else:
@@ -104,7 +100,7 @@ class DQN:
         max_next_q_values = self.target_q_net(next_states).max(1)[0].view(-1, 1)
         q_targets = rewards + self.gamma * max_next_q_values * (1 - dones)  # TD误差目标
         dqn_loss = torch.mean(F.mse_loss(q_values, q_targets))  # 均方误差损失函数
-        self.optimizer.zero_grad()
+        self.optimizer.zero_grad()  # PyTorch中默认梯度会累积,这里需要显式将梯度置为0
         dqn_loss.backward()  # 反向传播更新参数
         self.optimizer.step()
 
@@ -128,7 +124,7 @@ env_name = "CartPole-v0"
 env = gym.make(env_name)
 random.seed(0)
 np.random.seed(0)
-env.reset(seed=0)
+env.seed(0)
 torch.manual_seed(0)
 replay_buffer = ReplayBuffer(buffer_size)
 state_dim = env.observation_space.shape[0]
@@ -142,16 +138,15 @@ for i in range(10):
     with tqdm(total=int(num_episodes / 10), desc="Iteration %d" % i) as pbar:
         for i_episode in range(int(num_episodes / 10)):
             episode_return = 0
-            state, _ = env.reset()
+            state = env.reset()
             done = False
             while not done:
                 action = agent.take_action(state)
-                next_state, reward, terminated, truncated, _ = env.step(action)
-                done = terminated or truncated
+                next_state, reward, done, _ = env.step(action)
                 replay_buffer.add(state, action, reward, next_state, done)
                 state = next_state
                 episode_return += reward
-                # 当buffer数据量超过一定值后，才进行Q网络训练
+                # 当buffer数据的数量超过一定值后,才进行Q网络训练
                 if replay_buffer.size() > minimal_size:
                     b_s, b_a, b_r, b_ns, b_d = replay_buffer.sample(batch_size)
                     transition_dict = {
@@ -171,6 +166,27 @@ for i in range(10):
                     }
                 )
             pbar.update(1)
+
+# Iteration 0: 100%|██████████| 50/50 [00:00<00:00, 764.86it/s, episode=50,
+# return=9.300]
+# Iteration 1: 100%|██████████| 50/50 [00:04<00:00, 10.66it/s, episode=100,
+# return=12.300]
+# Iteration 2: 100%|██████████| 50/50 [00:24<00:00,  2.05it/s, episode=150,
+# return=123.000]
+# Iteration 3: 100%|██████████| 50/50 [01:25<00:00,  1.71s/it, episode=200,
+# return=153.600]
+# Iteration 4: 100%|██████████| 50/50 [01:30<00:00,  1.80s/it, episode=250,
+# return=180.500]
+# Iteration 5: 100%|██████████| 50/50 [01:24<00:00,  1.68s/it, episode=300,
+# return=185.000]
+# Iteration 6: 100%|██████████| 50/50 [01:32<00:00,  1.85s/it, episode=350,
+# return=193.900]
+# Iteration 7: 100%|██████████| 50/50 [01:31<00:00,  1.84s/it, episode=400,
+# return=196.600]
+# Iteration 8: 100%|██████████| 50/50 [01:33<00:00,  1.88s/it, episode=450,
+# return=193.800]
+# Iteration 9: 100%|██████████| 50/50 [01:34<00:00,  1.88s/it, episode=500,
+# return=200.000]
 
 episodes_list = list(range(len(return_list)))
 plt.plot(episodes_list, return_list)

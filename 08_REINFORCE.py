@@ -1,19 +1,18 @@
-import gymnasium as gym
+import gym
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
 import torch.nn.functional as F
-from torch import nn
 from tqdm import tqdm
 
 import rl_utils
 
 
-class PolicyNet(nn.Module):
+class PolicyNet(torch.nn.Module):
     def __init__(self, state_dim, hidden_dim, action_dim):
         super().__init__()
-        self.fc1 = nn.Linear(state_dim, hidden_dim)
-        self.fc2 = nn.Linear(hidden_dim, action_dim)
+        self.fc1 = torch.nn.Linear(state_dim, hidden_dim)
+        self.fc2 = torch.nn.Linear(hidden_dim, action_dim)
 
     def forward(self, x):
         x = F.relu(self.fc1(x))
@@ -60,9 +59,9 @@ hidden_dim = 128
 gamma = 0.98
 device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
 
-env_name = "CartPole-v1"
+env_name = "CartPole-v0"
 env = gym.make(env_name)
-env.reset(seed=0)
+env.seed(0)
 torch.manual_seed(0)
 state_dim = env.observation_space.shape[0]
 action_dim = env.action_space.n
@@ -80,14 +79,11 @@ for i in range(10):
                 "rewards": [],
                 "dones": [],
             }
-            state, _ = env.reset()
+            state = env.reset()
             done = False
             while not done:
                 action = agent.take_action(state)
-                next_state, reward, terminated, truncated, _ = env.step(action)
-                done = (
-                    terminated or truncated
-                )  # gymnasium 拆分为 terminated 和 truncated
+                next_state, reward, done, _ = env.step(action)
                 transition_dict["states"].append(state)
                 transition_dict["actions"].append(action)
                 transition_dict["next_states"].append(next_state)
@@ -105,6 +101,27 @@ for i in range(10):
                     }
                 )
             pbar.update(1)
+
+# Iteration 0: 100%|██████████| 100/100 [00:04<00:00, 23.88it/s, episode=100,
+# return=55.500]
+# Iteration 1: 100%|██████████| 100/100 [00:08<00:00, 10.45it/s, episode=200,
+# return=75.300]
+# Iteration 2: 100%|██████████| 100/100 [00:16<00:00,  4.75it/s, episode=300,
+# return=178.800]
+# Iteration 3: 100%|██████████| 100/100 [00:20<00:00,  4.90it/s, episode=400,
+# return=164.600]
+# Iteration 4: 100%|██████████| 100/100 [00:21<00:00,  4.58it/s, episode=500,
+# return=156.500]
+# Iteration 5: 100%|██████████| 100/100 [00:21<00:00,  4.73it/s, episode=600,
+# return=187.400]
+# Iteration 6: 100%|██████████| 100/100 [00:22<00:00,  4.40it/s, episode=700,
+# return=194.500]
+# Iteration 7: 100%|██████████| 100/100 [00:23<00:00,  4.24it/s, episode=800,
+# return=200.000]
+# Iteration 8: 100%|██████████| 100/100 [00:23<00:00,  4.33it/s, episode=900,
+# return=200.000]
+# Iteration 9: 100%|██████████| 100/100 [00:22<00:00,  4.14it/s, episode=1000,
+# return=186.100]
 
 episodes_list = list(range(len(return_list)))
 plt.plot(episodes_list, return_list)

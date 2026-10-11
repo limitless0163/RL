@@ -1,6 +1,6 @@
 import random
 
-import gymnasium as gym
+import gym
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
@@ -24,7 +24,7 @@ class Qnet(torch.nn.Module):
 
 
 class DQN:
-    """DQN算法，包括Double DQN"""
+    """DQN算法,包括Double DQN"""
 
     def __init__(
         self,
@@ -80,20 +80,21 @@ class DQN:
             .to(self.device)
         )
 
-        q_values = self.q_net(states).gather(1, actions)
-        if self.dqn_type == "DoubleDQN":  # DQN 与 Double DQN 的区别
+        q_values = self.q_net(states).gather(1, actions)  # Q值
+        # 下个状态的最大Q值
+        if self.dqn_type == "DoubleDQN":  # DQN与Double DQN的区别
             max_action = self.q_net(next_states).max(1)[1].view(-1, 1)
             max_next_q_values = self.target_q_net(next_states).gather(1, max_action)
         else:  # DQN的情况
             max_next_q_values = self.target_q_net(next_states).max(1)[0].view(-1, 1)
-        q_targets = rewards + self.gamma * max_next_q_values * (1 - dones)
-        dqn_loss = torch.mean(F.mse_loss(q_values, q_targets))
-        self.optimizer.zero_grad()
-        dqn_loss.backward()
+        q_targets = rewards + self.gamma * max_next_q_values * (1 - dones)  # TD误差目标
+        dqn_loss = torch.mean(F.mse_loss(q_values, q_targets))  # 均方误差损失函数
+        self.optimizer.zero_grad()  # PyTorch中默认梯度会累积,这里需要显式将梯度置为0
+        dqn_loss.backward()  # 反向传播更新参数
         self.optimizer.step()
 
         if self.count % self.target_update == 0:
-            self.target_q_net.load_state_dict(self.q_net.state_dict())
+            self.target_q_net.load_state_dict(self.q_net.state_dict())  # 更新目标网络
         self.count += 1
 
 
@@ -108,14 +109,13 @@ minimal_size = 1000
 batch_size = 64
 device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
 
-env_name = "Pendulum-v1"
+env_name = "Pendulum-v0"
 env = gym.make(env_name)
 state_dim = env.observation_space.shape[0]
-action_dim = 11
+action_dim = 11  # 将连续动作分成11个离散动作
 
 
-def dis_to_con(discrete_action, env, action_dim):
-    """离散动作转回连续的函数"""
+def dis_to_con(discrete_action, env, action_dim):  # 离散动作转回连续的函数
     action_lowbound = env.action_space.low[0]  # 连续动作的最小值
     action_upbound = env.action_space.high[0]  # 连续动作的最大值
     return action_lowbound + (discrete_action / (action_dim - 1)) * (
@@ -128,10 +128,10 @@ def train_DQN(agent, env, num_episodes, replay_buffer, minimal_size, batch_size)
     max_q_value_list = []
     max_q_value = 0
     for i in range(10):
-        with tqdm(total=int(num_episodes) / 10, desc="Iteration %d" % i) as pbar:
+        with tqdm(total=int(num_episodes / 10), desc="Iteration %d" % i) as pbar:
             for i_episode in range(int(num_episodes / 10)):
                 episode_return = 0
-                state, _ = env.reset()
+                state = env.reset()
                 done = False
                 while not done:
                     action = agent.take_action(state)
@@ -140,10 +140,7 @@ def train_DQN(agent, env, num_episodes, replay_buffer, minimal_size, batch_size)
                     )  # 平滑处理
                     max_q_value_list.append(max_q_value)  # 保存每个状态的最大Q值
                     action_continuous = dis_to_con(action, env, agent.action_dim)
-                    next_state, reward, terminated, truncated, _ = env.step(
-                        [action_continuous]
-                    )
-                    done = terminated or truncated
+                    next_state, reward, done, _ = env.step([action_continuous])
                     replay_buffer.add(state, action, reward, next_state, done)
                     state = next_state
                     episode_return += reward
@@ -171,7 +168,7 @@ def train_DQN(agent, env, num_episodes, replay_buffer, minimal_size, batch_size)
 
 random.seed(0)
 np.random.seed(0)
-env.reset(seed=0)
+env.seed(0)
 torch.manual_seed(0)
 replay_buffer = rl_utils.ReplayBuffer(buffer_size)
 agent = DQN(
@@ -200,7 +197,7 @@ plt.show()
 
 random.seed(0)
 np.random.seed(0)
-env.reset(seed=0)
+env.seed(0)
 torch.manual_seed(0)
 replay_buffer = rl_utils.ReplayBuffer(buffer_size)
 agent = DQN(
@@ -253,7 +250,7 @@ class VAnet(torch.nn.Module):
 
 
 class DQN:
-    """DQN算法，包括Double DQN和Dueling DQN"""
+    """DQN算法,包括Double DQN和Dueling DQN"""
 
     def __init__(
         self,
@@ -268,7 +265,7 @@ class DQN:
         dqn_type="VanillaDQN",
     ):
         self.action_dim = action_dim
-        if dqn_type == "Dueling DQN":
+        if dqn_type == "DuelingDQN":  # Dueling DQN采取不一样的网络框架
             self.q_net = VAnet(state_dim, hidden_dim, self.action_dim).to(device)
             self.target_q_net = VAnet(state_dim, hidden_dim, self.action_dim).to(device)
         else:
@@ -332,7 +329,7 @@ class DQN:
 
 random.seed(0)
 np.random.seed(0)
-env.reset(seed=0)
+env.seed(0)
 torch.manual_seed(0)
 replay_buffer = rl_utils.ReplayBuffer(buffer_size)
 agent = DQN(
